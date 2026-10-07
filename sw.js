@@ -1,21 +1,7 @@
-/*
- * Service worker — Assistant Pédagogique (Registre d'appel)
- *
- * Stratégie volontairement simple, adaptée à une appli en un seul fichier
- * HTML mise à jour régulièrement :
- *  - index.html : toujours tenté en réseau d'abord (pour avoir la dernière
- *    version dès qu'il y a du réseau), avec repli sur la version en cache
- *    si hors-ligne. Pas besoin de changer CACHE_NAME à chaque mise à jour.
- *  - manifest.json + icônes : cache d'abord (changent rarement), avec
- *    repli réseau si absents du cache.
- *  - Tout le reste (API, Firebase, etc.) : laissé au réseau, jamais mis en
- *    cache par ce service worker.
- */
-
-const CACHE_NAME = "apg-cache-v1";
+const CACHE_NAME = "apg-cache-v2";
+const PAGE_URL = "./index.html";
 const PRECACHE_URLS = [
-  "./",
-  "./index.html",
+  PAGE_URL,
   "./manifest.json",
   "./icon-192.png",
   "./icon-512.png",
@@ -24,65 +10,61 @@ const PRECACHE_URLS = [
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(PRECACHE_URLS))
+    caches
+      .open(CACHE_NAME)
+      .then((cache) => cache.addAll(PRECACHE_URLS))
+      .catch((err) => {
+        console.warn("Service worker : précache incomplète —", err);
+      })
   );
   self.skipWaiting();
 });
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(
-        keys
-          .filter((key) => key !== CACHE_NAME)
-          .map((key) => caches.delete(key))
+    caches
+      .keys()
+      .then((keys) =>
+        Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key)))
       )
-    )
+      .then(() => self.clients.claim())
   );
-  self.clients.claim();
 });
 
-function estPageHTML(request) {
-  return (
-    request.mode === "navigate" ||
-    (request.method === "GET" &&
-      request.headers.get("accept") &&
-      request.headers.get("accept").includes("text/html"))
-  );
-}
-
 self.addEventListener("fetch", (event) => {
-  const { request } = event;
+  const request = event.request;
   if (request.method !== "GET") return;
 
-  const url = new URL(request.url);
-  if (url.origin !== self.location.origin) return; // ne touche pas Firebase/API externes
-
-  // Page principale : réseau d'abord, repli sur le cache hors-ligne.
-  if (estPageHTML(request)) {
-    event.respondWith(
-      fetch(request)
-        .then((reponse) => {
-          const copie = reponse.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(request, copie));
-          return reponse;
-        })
-        .catch(() =>
-          caches.match(request).then((reponse) => reponse || caches.match("./index.html"))
-        )
-    );
+  let url;
+  try {
+    url = new URL(request.url);
+  } catch (e) {
     return;
   }
+  if (url.origin !== self.location.origin) return;
 
-  // Manifest, icônes, autres fichiers statiques du même site : cache d'abord.
+  const estNavigation = request.mode === "navigate";
+  const cleCache = estNavigation ? PAGE_URL : request;
+
   event.respondWith(
-    caches.match(request).then((reponse) => {
-      if (reponse) return reponse;
-      return fetch(request).then((reponseReseau) => {
-        const copie = reponseReseau.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(request, copie));
+    (async () => {
+      try {
+        const reponseReseau = await fetch(request);
+        if (reponseReseau && reponseReseau.ok) {
+          try {
+            const cache = await caches.open(CACHE_NAME);
+            await cache.put(cleCache, reponseReseau.clone());
+          } catch (e) {}
+        }
         return reponseReseau;
-      });
-    })
+      } catch (erreurReseau) {
+        try {
+          const cache = await caches.open(CACHE_NAME);
+          const repliCache = await cache.match(cleCache);
+          if (repliCache) return repliCache;
+        } catch (e) {}
+        throw erreurReseau;
+      }
+    })()
   );
 });
