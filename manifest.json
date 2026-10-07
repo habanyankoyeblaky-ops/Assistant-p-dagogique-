@@ -1,0 +1,32 @@
+{
+  "name": "Assistant Pédagogique — Registre d'appel",
+  "short_name": "Assistant Péda",
+  "description": "Assistant pédagogique pour la gestion de classe (MENA-ETFP, Guinée) : élèves, notes, présences, fiches de préparation, emploi du temps et assistant IA.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#F5F1E2",
+  "theme_color": "#0E5C63",
+  "lang": "fr",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
