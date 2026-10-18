@@ -20,7 +20,7 @@
   "use strict";
   // Accès fermé par défaut : tant que la vérification de l'accès n'a pas abouti, rien de l'application n'est visible.
   document.documentElement.classList.add("apg-acces-verif");
-  var APG_VERSION_ACTUELLE = "20261018b";
+  var APG_VERSION_ACTUELLE = "20261018g";
   var URL_BASE = "https://habanyankoyeblaky-ops.github.io/Assistant-p-dagogique-/";
   window.__apgVersionActuelle = APG_VERSION_ACTUELLE;
   window.__apgMajUrlBase = URL_BASE;
@@ -4347,16 +4347,37 @@ window.APG_BLOOM_DIDACTIQUE = "\n\nDIDACTIQUE (taxonomie révisée de Bloom) : s
   // vérification en ligne. Cette vérification est refaite à chaque démarrage où le réseau le permet.
   var DELAI_VERIF_MS = 30 * 24 * 3600 * 1000;
   var STAMP_KEY = "apg_acces_verifie";
-  function lireStamp(){ try{ return JSON.parse(localStorage.getItem(STAMP_KEY) || "null"); } catch(e){ return null; } }
-  function ecrireStamp(user){ try{ localStorage.setItem(STAMP_KEY, JSON.stringify({ uid: user.uid, verifieLe: Date.now() })); } catch(e){ /* ignore */ } }
-  function effacerStamp(){ try{ localStorage.removeItem(STAMP_KEY); } catch(e){ /* ignore */ } }
+  // Une preuve PAR COMPTE : { uid: dateDeLaDerniereVerification, ... }. Un autre compte ne la remplace plus.
+  // (Ancien format { uid, verifieLe } accepté et converti à la lecture.)
+  function lireStamps(){
+    try{
+      var v = JSON.parse(localStorage.getItem(STAMP_KEY) || "null");
+      if (!v || typeof v !== "object") return {};
+      if (v.uid && v.verifieLe){ var m = {}; m[v.uid] = v.verifieLe; return m; }
+      return v;
+    } catch(e){ return {}; }
+  }
+  function lireStamp(){ var m = lireStamps(); return Object.keys(m).length ? m : null; }
+  function ecrireStamp(user){
+    try{
+      var m = lireStamps(); m[user.uid] = Date.now();
+      localStorage.setItem(STAMP_KEY, JSON.stringify(m));
+      localStorage.setItem("apg_compte_connecte", user.uid);
+    } catch(e){ /* ignore */ }
+  }
+  // Sans identifiant : efface toutes les preuves. Avec identifiant : seulement celle de ce compte.
+  function effacerStamp(uid){
+    try{
+      if (!uid){ localStorage.removeItem(STAMP_KEY); return; }
+      var m = lireStamps(); delete m[uid];
+      localStorage.setItem(STAMP_KEY, JSON.stringify(m));
+    } catch(e){ /* ignore */ }
+  }
   // Accès encore valable hors connexion : vérification en ligne datant de moins de 30 jours (pour ce compte).
   function stampValide(uid){
-    var s = lireStamp();
-    if (!s || !s.verifieLe) return false;
-    if (uid && s.uid !== uid) return false;
-    var age = Date.now() - s.verifieLe;
-    return age >= 0 && age < DELAI_VERIF_MS;
+    var m = lireStamps();
+    var dates = uid ? (m[uid] ? [m[uid]] : []) : Object.keys(m).map(function(k){ return m[k]; });
+    return dates.some(function(t){ var age = Date.now() - t; return age >= 0 && age < DELAI_VERIF_MS; });
   }
   function bloquer(texte){ htmlEl.classList.remove("apg-acces-verif"); htmlEl.classList.add("apg-auth-needed"); btn.disabled = false; setMsg(texte || "", !!texte); }
   function debloquer(){ htmlEl.classList.remove("apg-acces-verif"); htmlEl.classList.remove("apg-auth-needed"); btn.disabled = false; setMsg(""); }
@@ -4375,7 +4396,8 @@ window.APG_BLOOM_DIDACTIQUE = "\n\nDIDACTIQUE (taxonomie révisée de Bloom) : s
   var messageRefus = "";   // message à afficher après la déconnexion forcée d'un compte refusé
   function appliquerEtat(user){
     if (!user){
-      effacerStamp();
+      // Déconnexion : on ne retire que la preuve du compte qui vient de se déconnecter.
+      try{ var dernier = localStorage.getItem("apg_compte_connecte"); if (dernier) effacerStamp(dernier); } catch(e){ /* ignore */ }
       bloquer(messageRefus);
       messageRefus = "";
       try{ window.dispatchEvent(new CustomEvent("apg:auth-signed-out")); }catch(e){}
@@ -4385,7 +4407,7 @@ window.APG_BLOOM_DIDACTIQUE = "\n\nDIDACTIQUE (taxonomie révisée de Bloom) : s
       if (res === "ok"){ ecrireStamp(user); debloquer(); signalerPret(user); return; }
       if (res === "refuse"){
         // Déconnexion forcée : le compte doit repartir d'un écran de connexion propre (même compte réessayable).
-        effacerStamp();
+        effacerStamp(user.uid);
         messageRefus = "Votre accès n'est plus valide. Contactez l'administrateur de l'application.";
         window.__apgFbAuth.signOut().catch(function(){ bloquer(messageRefus); messageRefus = ""; });
         return;
@@ -5211,7 +5233,7 @@ window.APG_BLOOM_DIDACTIQUE = "\n\nDIDACTIQUE (taxonomie révisée de Bloom) : s
       <div class="nav-item" data-page="discipline"><span class="nav-icon">📋</span><span class="nav-label">Discipline &amp; Fiches élève</span></div>
 
       <div class="nav-category-label">Documents</div>
-      <div class="nav-item" data-page="dossier-fl"><span class="nav-icon">🗂️</span><span class="nav-label">Fiche de leçon</span></div>
+      <div class="nav-item" data-page="fiches-lecon"><span class="nav-icon">📚</span><span class="nav-label">Fiches de leçon et contenus pédagogiques</span></div>
       <div class="nav-item" data-page="fiches-qr"><span class="nav-icon">🧠</span><span class="nav-label">Fiches questions-réponses</span></div>
       <div class="nav-item" data-page="dossier-complet"><span class="nav-icon">🗃️</span><span class="nav-label">Dossier pédagogique complet</span></div>
       <div class="nav-item" data-page="centre-documents"><span class="nav-icon">🗄️</span><span class="nav-label">Centre de production des documents</span></div>
@@ -6797,15 +6819,6 @@ window.APG_BLOOM_DIDACTIQUE = "\n\nDIDACTIQUE (taxonomie révisée de Bloom) : s
 
       <section class="page" id="page-centre-documents">
         <h2>Centre de production des documents</h2>
-        <div class="card" style="padding:12px 14px; margin-bottom:14px;">
-          <h3 style="margin:0 0 6px;">📚 Fiches de leçon et contenus pédagogiques</h3>
-          <p style="font-size:0.85rem; color:var(--color-ink-soft); margin:0 0 10px;">Toutes les fiches de leçon et leurs contenus restent accessibles ici. Filtrez par classe ou recherchez par mot-clé.</p>
-          <div class="form-grid cols-2">
-            <div class="field"><label for="dfl-classe-filter">Classe</label><select id="dfl-classe-filter"><option value="">Toutes les classes</option></select></div>
-            <div class="field"><label for="dfl-search">Rechercher</label><input type="search" id="dfl-search" placeholder="Titre, chapitre…"></div>
-          </div>
-          <div id="dfl-grid"></div>
-        </div>
         <p style="font-size:0.85rem; color:var(--color-ink-soft); margin:4px 0 12px;">Compose un document unique (cahier de préparation, dossier de matière) à partir des productions du Studio, par type de document. Les productions viennent de la classe active, ou de toutes les classes du même niveau pour la même matière.</p>
         <p id="cdp-etat" style="font-size:0.9rem; color:#5A6B82; margin:6px 0 10px;"></p>
         <div class="card" style="padding:12px 14px; margin-bottom:12px;">
@@ -6937,6 +6950,19 @@ window.APG_BLOOM_DIDACTIQUE = "\n\nDIDACTIQUE (taxonomie révisée de Bloom) : s
         <div class="card" style="padding:14px; margin-top:12px;">
           <h3 class="pp-card-title">Documents enregistrés</h3>
           <div id="da-liste"><p class="page-sub">Aucun document enregistré.</p></div>
+        </div>
+      </section>
+
+      <section class="page" id="page-fiches-lecon">
+        <h2>Fiches de leçon et contenus pédagogiques</h2>
+        <div class="card" style="padding:12px 14px; margin-bottom:14px;">
+          <h3 style="margin:0 0 6px;">📚 Fiches de leçon et contenus pédagogiques</h3>
+          <p style="font-size:0.85rem; color:var(--color-ink-soft); margin:0 0 10px;">Toutes les fiches de leçon et leurs contenus restent accessibles ici. Filtrez par classe ou recherchez par mot-clé.</p>
+          <div class="form-grid cols-2">
+            <div class="field"><label for="dfl-classe-filter">Classe</label><select id="dfl-classe-filter"><option value="">Toutes les classes</option></select></div>
+            <div class="field"><label for="dfl-search">Rechercher</label><input type="search" id="dfl-search" placeholder="Titre, chapitre…"></div>
+          </div>
+          <div id="dfl-grid"></div>
         </div>
       </section>
 
@@ -8513,6 +8539,18 @@ window.APG_BLOOM_DIDACTIQUE = "\n\nDIDACTIQUE (taxonomie révisée de Bloom) : s
           </p>
           <button type="button" class="btn-primary btn-inline" id="diag-run" style="width:auto; margin:0;">🩺 Lancer un diagnostic</button>
           <div id="diag-result" style="margin-top:12px;"></div>
+        </div>
+        <button type="button" class="btn-primary btn-inline" id="rg-toggle-formatage" style="width:100%; display:flex; align-items:center; justify-content:space-between; gap:8px; margin:0;"><span>🧹 Formater l'application</span><span class="chevron" id="rg-chevron-formatage">▾</span></button>
+        <div class="card no-print hidden" id="rg-formatage-content" data-fermer-a-chaque-entree-bouton="rg-chevron-formatage">
+          <p style="font-size:0.85rem; color:#B42318; font-weight:700; margin:0 0 8px;">⚠️ Action irréversible</p>
+          <p style="font-size:0.78rem; color:var(--color-ink-soft); margin:0 0 10px;">Supprime toutes les données de l'application sur cet appareil ET dans la base de données en ligne. Connexion Internet obligatoire. Vous devrez confirmer, puis saisir le mot de passe du compte créé par l'administrateur.</p>
+          <button type="button" class="btn-primary btn-inline" id="formatage-ouvrir" style="width:auto; margin:0; background:#B42318;">🧹 Formater l'application…</button>
+          <div id="formatage-zone-mdp" class="hidden" style="margin-top:12px;">
+            <label for="formatage-mdp">Mot de passe du compte</label>
+            <input type="password" id="formatage-mdp" autocomplete="current-password" placeholder="Mot de passe">
+            <button type="button" class="btn-primary btn-inline" id="formatage-valider" style="width:auto; margin:10px 0 0; background:#B42318;">Confirmer le formatage</button>
+          </div>
+          <p id="formatage-msg" style="font-size:0.85rem; margin:10px 0 0;"></p>
         </div>
         </div>
       </section>
@@ -11771,6 +11809,138 @@ window.APG_BLOOM_DIDACTIQUE = "\n\nDIDACTIQUE (taxonomie révisée de Bloom) : s
   }
 
   // --- Diagnostics et intégrité des données ---
+  // --- Formater l'application : efface les données locales ET cloud ---
+  // Ordre de sécurité : Internet obligatoire, confirmation, puis mot de passe du compte
+  // (re-authentification Firebase : la session ne change pas). Le cloud est effacé en
+  // premier : si cette étape échoue, la base locale reste intacte.
+  function formaterMessageErreurAuth(err){
+    const c = (err && err.code) || "";
+    if (c === "auth/wrong-password" || c === "auth/invalid-credential" || c === "auth/invalid-login-credentials") return "Mot de passe incorrect.";
+    if (c === "auth/too-many-requests") return "Trop de tentatives. Réessayez plus tard.";
+    if (c === "auth/network-request-failed") return "Connexion Internet nécessaire.";
+    if (c === "auth/user-token-expired" || c === "auth/requires-recent-login") return "Session expirée : déconnectez-vous puis reconnectez-vous.";
+    return "Vérification impossible" + (c ? " (" + c + ")" : "") + ".";
+  }
+  function formaterSetMsg(texte, erreur){
+    const el = document.getElementById("formatage-msg");
+    if (!el) return;
+    el.textContent = texte;
+    el.style.color = erreur ? "#B42318" : "";
+  }
+  async function formaterEffacerCloud(){
+    let etape = "lecture";
+    let magasin = "";
+    try{
+      for (const store of Object.keys(STORE_KEYPATH)){
+        magasin = store;
+        etape = "lecture";
+        const snap = await syncLireCollection(fbColl(store));
+        const refs = [];
+        snap.forEach(function(d){ refs.push(d.ref); });
+        for (let k = 0; k < refs.length; k += 400){
+          etape = "suppression";
+          const lot = window.__apgFbDb.batch();
+          refs.slice(k, k + 400).forEach(function(r){ lot.delete(r); });
+          await syncAvecDelai(lot.commit(), 25000);
+        }
+      }
+    } catch(err){
+      const code = (err && (err.code || err.message)) || "erreur";
+      throw new Error("étape « " + etape + " » sur « " + magasin + " » — code : " + code);
+    }
+  }
+  function formaterEffacerBaseLocale(){
+    return new Promise(function(resolve, reject){
+      try{ if (dbInstance){ dbInstance.close(); dbInstance = null; } } catch(e){ /* ignore */ }
+      let req;
+      try{ req = indexedDB.deleteDatabase(DB_NAME); } catch(e){ reject(e); return; }
+      const delai = setTimeout(function(){ reject(new Error("suppression bloquée — fermez les autres onglets de l'application")); }, 15000);
+      req.onsuccess = function(){ clearTimeout(delai); resolve(); };
+      req.onerror = function(){ clearTimeout(delai); reject(req.error || new Error("erreur base locale")); };
+    });
+  }
+  function formaterEffacerReglagesLocaux(){
+    // Conservés : mises à jour automatiques en cours, et l'apparence choisie.
+    const garder = function(k){
+      return k.indexOf("apg_maj_") === 0 || k === "apg_derniere_version_appliquee" ||
+             k === "apg_uid_courant" || k === "apg_uid_base_legacy" ||
+             k === "assistant_pedagogique_theme" || k === "assistant_pedagogique_palette_vars" ||
+             k === "assistant_pedagogique_fond_vars";
+    };
+    const aSupprimer = [];
+    for (let i = 0; i < localStorage.length; i++){
+      const k = localStorage.key(i);
+      if (!k || garder(k) || !(k.indexOf("apg") === 0 || k.indexOf("assistant_pedagogique") === 0)) continue;
+      // Compte courant : seulement ses propres clés ; base historique : les clés non rattachées à un compte.
+      const rattacheACompte = /_[A-Za-z0-9]{20,}$/.test(k);
+      if (APG_SUFFIXE !== "" ? k.endsWith(APG_SUFFIXE) : !rattacheACompte) aSupprimer.push(k);
+    }
+    aSupprimer.forEach(function(k){ try{ localStorage.removeItem(k); } catch(e){ /* ignore */ } });
+    syncAttenteMemoire = null;
+  }
+  async function formaterApplication(){
+    const btn = document.getElementById("formatage-valider");
+    if (btn) btn.disabled = true;
+    try{
+      if (!fbPret() || !window.__apgFbAuth.currentUser){ formaterSetMsg("Connexion Internet et compte connecté nécessaires.", true); return; }
+      if (navigator.onLine === false){ formaterSetMsg("Pas de connexion Internet : le formatage est impossible hors ligne.", true); return; }
+      const pass = (document.getElementById("formatage-mdp") || {}).value || "";
+      if (!pass){ formaterSetMsg("Saisissez le mot de passe du compte.", true); return; }
+      const user = window.__apgFbAuth.currentUser;
+      formaterSetMsg("Vérification du mot de passe…");
+      try{
+        // Reconnexion réelle : vérifie le mot de passe ET met à jour l'heure de connexion (auth_time),
+        // que la règle Firestore contrôle pour autoriser la suppression. La réauthentification seule ne la met pas à jour.
+        await window.__apgFbAuth.signInWithEmailAndPassword(user.email, pass);
+        await window.__apgFbAuth.currentUser.getIdToken(true);
+      } catch(err){ formaterSetMsg(formaterMessageErreurAuth(err), true); return; }
+      syncPauseEcriture(120000); // aucune synchronisation ne doit réécrire les données pendant le formatage
+      formaterSetMsg("Suppression des données dans le cloud…");
+      try{ await formaterEffacerCloud(); }
+      catch(err){ formaterSetMsg("Échec dans le cloud : " + ((err && err.message) || "erreur") + ". Les données locales ont été conservées.", true); return; }
+      formaterSetMsg("Suppression des données sur l'appareil…");
+      try{ await formaterEffacerBaseLocale(); }
+      catch(err){ formaterSetMsg("Le cloud a été vidé, mais la base locale n'a pas pu être effacée (" + ((err && err.message) || "erreur") + "). Réessayez.", true); return; }
+      formaterEffacerReglagesLocaux();
+      formaterSetMsg("Application formatée. Rechargement…");
+      setTimeout(function(){ window.location.reload(); }, 1200);
+    } finally { if (btn) btn.disabled = false; }
+  }
+  (function formaterInitialiser(){
+    const ouvrir = document.getElementById("formatage-ouvrir");
+    const zone = document.getElementById("formatage-zone-mdp");
+    const valider = document.getElementById("formatage-valider");
+    if (!ouvrir || !zone || !valider) return;
+    ouvrir.addEventListener("click", async function(){
+      if (navigator.onLine === false){ await openApgDialog("Le formatage nécessite une connexion Internet.", false); return; }
+      const ok = await openApgDialog("ATTENTION : cette action supprime DÉFINITIVEMENT toutes les données de cet appareil ET celles de la base en ligne (classes, élèves, notes, présences, fiches, etc.). Elle est irréversible. Voulez-vous continuer ?", true);
+      if (!ok) return;
+      zone.classList.remove("hidden");
+      document.getElementById("formatage-mdp").focus();
+    });
+    valider.addEventListener("click", formaterApplication);
+  })();
+
+  // Compte connecté différent de celui de cette session : on recharge pour utiliser sa propre base.
+  (function apgLierCompte(){
+    const surChangement = function(user){
+      if (!user || !user.uid || user.uid === APG_UID_COURANT) return;
+      try{
+        if (!localStorage.getItem("apg_uid_base_legacy")) localStorage.setItem("apg_uid_base_legacy", user.uid);
+        localStorage.setItem("apg_uid_courant", user.uid);
+      } catch(e){ return; } // stockage indisponible : pas de rechargement (évite une boucle)
+      window.location.reload();
+    };
+    function brancher(){
+      if (window.__apgFbAuth && !window.__apgCompteBranche){
+        window.__apgCompteBranche = true;
+        window.__apgFbAuth.onAuthStateChanged(surChangement);
+      }
+    }
+    window.addEventListener("apg:fb-init-done", brancher);
+    brancher();
+  })();
+
   const diagRunBtn = document.getElementById("diag-run");
   if (diagRunBtn){
     diagRunBtn.addEventListener("click", async () => {
@@ -12085,6 +12255,32 @@ window.APG_BLOOM_DIDACTIQUE = "\n\nDIDACTIQUE (taxonomie révisée de Bloom) : s
     }
   });
 
+  // Élément de corbeille replié : seul le titre est visible ; un clic affiche le détail et les actions.
+  function corbeilleItem(titre, detail, actions){
+    const wrap = document.createElement("div");
+    wrap.className = "pg-coverage-row";
+    wrap.style.cssText = "flex-direction:column; align-items:stretch;";
+    const head = document.createElement("button");
+    head.type = "button";
+    head.style.cssText = "text-align:left; background:none; border:none; padding:6px 0; cursor:pointer; font:inherit; color:inherit; width:100%;";
+    head.textContent = "▸ " + titre;
+    const body = document.createElement("div");
+    body.className = "hidden";
+    body.style.cssText = "padding:4px 0 8px 14px;";
+    const p = document.createElement("p");
+    p.style.cssText = "font-size:0.8rem; color:var(--color-ink-soft); margin:0 0 6px;";
+    p.textContent = detail;
+    body.appendChild(p);
+    body.appendChild(actions);
+    head.addEventListener("click", () => {
+      const replie = body.classList.toggle("hidden");
+      head.textContent = (replie ? "▸ " : "▾ ") + titre;
+    });
+    wrap.appendChild(head);
+    wrap.appendChild(body);
+    return wrap;
+  }
+
   async function renderCorbeilleDocuments(){
     const container = document.getElementById("corbeille-documents-list");
     if (!container) return;
@@ -12109,14 +12305,10 @@ window.APG_BLOOM_DIDACTIQUE = "\n\nDIDACTIQUE (taxonomie révisée de Bloom) : s
     const maintenant = Date.now();
     entrees.forEach(entree => {
       const lot = entree.groupe ? entrees.filter(e => e.groupe === entree.groupe) : [entree];
-      const row = document.createElement("div");
-      row.className = "pg-coverage-row";
-      const label = document.createElement("span");
       const jours = Math.max(0, CORBEILLE_DOC_JOURS - Math.floor((maintenant - new Date(entree.deletedAt).getTime()) / (24 * 60 * 60 * 1000)));
-      label.textContent = entree.libelle + " — " + entree.titre +
+      const detail = entree.libelle +
         (lot.length > 1 ? " (avec " + (lot.length - 1) + " contenu(s) rattaché(s))" : "") +
         " — supprimé le " + formatShort(new Date(entree.deletedAt)) + " (" + jours + " j restants)";
-      row.appendChild(label);
 
       const actions = document.createElement("div");
       actions.style.cssText = "display:flex; gap:8px; flex-wrap:wrap;";
@@ -12148,8 +12340,7 @@ window.APG_BLOOM_DIDACTIQUE = "\n\nDIDACTIQUE (taxonomie révisée de Bloom) : s
       });
 
       actions.appendChild(restoreBtn); actions.appendChild(delBtn);
-      row.appendChild(actions);
-      container.appendChild(row);
+      container.appendChild(corbeilleItem(entree.titre, detail, actions));
     });
   }
 
@@ -12181,13 +12372,9 @@ window.APG_BLOOM_DIDACTIQUE = "\n\nDIDACTIQUE (taxonomie révisée de Bloom) : s
     entries.sort((a, b) => new Date(b.deletedAt) - new Date(a.deletedAt));
     container.innerHTML = "";
     entries.forEach(entry => {
-      const row = document.createElement("div");
-      row.className = "pg-coverage-row";
-      const label = document.createElement("span");
+      const titreClasse = entry.classe && entry.classe.nom ? entry.classe.nom : "Classe";
       const joursRestants = Math.max(0, 30 - Math.floor((maintenant - new Date(entry.deletedAt).getTime()) / (24 * 60 * 60 * 1000)));
-      label.textContent = (entry.classe && entry.classe.nom ? entry.classe.nom : "Classe") +
-        " — supprimée le " + formatShort(new Date(entry.deletedAt)) + " (" + joursRestants + " j restants)";
-      row.appendChild(label);
+      const detail = "Classe — supprimée le " + formatShort(new Date(entry.deletedAt)) + " (" + joursRestants + " j restants)";
 
       const actions = document.createElement("div");
       actions.style.cssText = "display:flex; gap:8px; flex-wrap:wrap;";
@@ -12220,8 +12407,7 @@ window.APG_BLOOM_DIDACTIQUE = "\n\nDIDACTIQUE (taxonomie révisée de Bloom) : s
       });
 
       actions.appendChild(restoreBtn); actions.appendChild(delBtn);
-      row.appendChild(actions);
-      container.appendChild(row);
+      container.appendChild(corbeilleItem(titreClasse, detail, actions));
     });
   }
 
@@ -12475,7 +12661,13 @@ window.APG_BLOOM_DIDACTIQUE = "\n\nDIDACTIQUE (taxonomie révisée de Bloom) : s
   /* ---------------------------------------------------------------
      2. STOCKAGE STRUCTURÉ — IndexedDB (prêt pour classes/élèves/notes)
      --------------------------------------------------------------- */
-  const DB_NAME = "assistant_pedagogique_db";
+  // Données séparées PAR COMPTE : une base locale et des marqueurs de synchronisation par compte.
+  // Le suffixe vient du dernier compte connecté (mémorisé sur l'appareil). L'ancienne base (sans
+  // suffixe) appartient au premier compte connecté sur l'appareil après cette mise à jour.
+  var APG_UID_COURANT = (function(){ try{ return localStorage.getItem("apg_uid_courant") || ""; } catch(e){ return ""; } })();
+  var APG_UID_PROPRIETAIRE_BASE = (function(){ try{ return localStorage.getItem("apg_uid_base_legacy") || ""; } catch(e){ return ""; } })();
+  var APG_SUFFIXE = (!APG_UID_COURANT || APG_UID_COURANT === APG_UID_PROPRIETAIRE_BASE) ? "" : ("_" + APG_UID_COURANT);
+  const DB_NAME = "assistant_pedagogique_db" + APG_SUFFIXE;
   const DB_VERSION = 26;
   let dbInstance = null;
 
@@ -13494,6 +13686,7 @@ window.APG_BLOOM_DIDACTIQUE = "\n\nDIDACTIQUE (taxonomie révisée de Bloom) : s
     "docs-administratifs": "Documents administratifs officiels",
     "dossier-complet": "Dossier pédagogique complet",
     "centre-documents": "Centre de production des documents",
+    "fiches-lecon": "Fiches de leçon et contenus pédagogiques",
     studio: "Studio de production pédagogique",
     "studio-schemas": "Studio de schémas",
     programme: "Programme officiel",
@@ -13683,6 +13876,7 @@ window.APG_BLOOM_DIDACTIQUE = "\n\nDIDACTIQUE (taxonomie révisée de Bloom) : s
     if (pageId === "discipline") renderDisciplinePage();
     if (pageId === "ia") renderIaPedContexte();
     if (pageId === "centre-documents") renderDossierFicheLecon();
+    if (pageId === "fiches-lecon") renderDossierFicheLecon();
     if (pageId === "studio" && typeof renderBanqueQuestions === "function") renderBanqueQuestions();
     if (pageId === "fiches-qr") bqRenderFichesQr();
     if (pageId === "docs-administratifs") daMajChamps();
@@ -14175,7 +14369,8 @@ window.APG_BLOOM_DIDACTIQUE = "\n\nDIDACTIQUE (taxonomie révisée de Bloom) : s
     ["rg-toggle-cloud", "rg-cloud-content", "rg-chevron-cloud"],
     ["rg-toggle-maj", "rg-maj-content", "rg-chevron-maj"],
     ["rg-toggle-sauvegarde", "rg-sauvegarde-content", "rg-chevron-sauvegarde"],
-    ["rg-toggle-diagnostics", "rg-diagnostics-content", "rg-chevron-diagnostics"]
+    ["rg-toggle-diagnostics", "rg-diagnostics-content", "rg-chevron-diagnostics"],
+    ["rg-toggle-formatage", "rg-formatage-content", "rg-chevron-formatage"]
   ], { repliable: true });
 
   /* ---------------------------------------------------------------
@@ -23515,10 +23710,10 @@ window.APG_BLOOM_DIDACTIQUE = "\n\nDIDACTIQUE (taxonomie révisée de Bloom) : s
   //   et la donnée ne peut plus revenir.
   // - En cas de modification simultanée, la version la plus récente gagne (date).
   // =====================================================================
-  const SYNC_EN_ATTENTE = "apg_sync_en_attente_v3";
-  const SYNC_CURSEUR = "apg_sync_curseur_v3";
-  const SYNC_INITIALISE = "apg_sync_initialise_v3";
-  const SYNC_VIDER = "apg_sync_vider_v3";
+  const SYNC_EN_ATTENTE = "apg_sync_en_attente_v3" + APG_SUFFIXE;
+  const SYNC_CURSEUR = "apg_sync_curseur_v3" + APG_SUFFIXE;
+  const SYNC_INITIALISE = "apg_sync_initialise_v3" + APG_SUFFIXE;
+  const SYNC_VIDER = "apg_sync_vider_v3" + APG_SUFFIXE;
   let syncPauseJusqua = 0;
   let syncTimerPlanifie = null;
   let syncDernierTrop = 0;
