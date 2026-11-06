@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Assistant Pédagogique">
+  <rect width="512" height="512" rx="96" fill="#1E3A5F"/>
+  <path d="M256 150 120 214l136 64 136-64z" fill="#F5F1E2"/>
+  <path d="M170 258v62c0 22 38 46 86 46s86-24 86-46v-62l-86 40z" fill="#F5F1E2" opacity=".85"/>
+  <path d="M392 214v96" stroke="#F5F1E2" stroke-width="12" stroke-linecap="round"/>
+  <circle cx="392" cy="318" r="14" fill="#F5F1E2"/>
+</svg>
